@@ -1,0 +1,25 @@
+{
+	"$schema": "https://raw.githubusercontent.com/platformio/platformio-core/develop/platformio/assets/schema/library.json",
+	"name": "arduino-at",
+	"version": "0.1.0",
+	"description": "It's a fully async library for communicate with AT modems.",
+	"keywords":["async", "at", "at command", "gsm"],
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/yeganemehr/arduino-at.git"
+	},
+	"authors": [{
+		"name": "Amir H. Yeganemehr",
+		"maintainer": true
+	}],
+	"frameworks": [
+		"arduino"
+	],
+	"platforms": "*",
+	"homepage": "https://github.com/yeganemehr/arduino-at",
+	"dependencies": {
+		"yeganemehr/promise": "^1.0.0",
+		"yeganemehr/event-emitter": "^1.0.0"
+	}
+}
