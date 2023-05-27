@@ -4,24 +4,6 @@
 ATConnection::ATConnection(Stream *stream) : stream(stream)
 {
 }
-void ATConnection::putTheCommandInBuffer(CommandQueueItem *item)
-{
-	switch (item->type)
-	{
-	case CommandQueueItem::Type::GET:
-		putTheCommandInBuffer(&item->command.get);
-		break;
-	case CommandQueueItem::Type::SET:
-		putTheCommandInBuffer(&item->command.set);
-		break;
-	case CommandQueueItem::Type::TEST:
-		putTheCommandInBuffer(&item->command.test);
-		break;
-	case CommandQueueItem::Type::EXECUTE:
-		putTheCommandInBuffer(&item->command.execute);
-		break;
-	}
-}
 void ATConnection::putTheCommandInBuffer(GetCommand *command)
 {
 	assert(!buffer.length());
@@ -102,6 +84,7 @@ Promise<String> *ATConnection::getValue(const char *variable) noexcept
 	auto ptr = new char[variableLength + 1];
 	memcpy(ptr, variable, variableLength + 1);
 	commandQueue.push(CommandQueueItem{CommandQueueItem::Type::GET, {.get = {.variable = ptr}}, promise});
+	putTheCommandInBufferIfCan();
 	return promise;
 }
 Promise<String> *ATConnection::execute(const char *command) noexcept
@@ -120,6 +103,7 @@ Promise<String> *ATConnection::execute(const char *command) noexcept
 		},
 		.promise = promise
 	});
+	putTheCommandInBufferIfCan();
 	return promise;
 }
 Promise<String> *ATConnection::execute(const char *command, const char *secondPart) noexcept {
@@ -140,6 +124,7 @@ Promise<String> *ATConnection::execute(const char *command, const char *secondPa
 		},
 		.promise = promise
 	});
+	putTheCommandInBufferIfCan();
 	return promise;
 }
 Promise<String> *ATConnection::test(const char *variable) noexcept
@@ -156,6 +141,7 @@ Promise<String> *ATConnection::test(const char *variable) noexcept
 	if (commandQueue.size() == 1) {
 		this->state = State::WRITING;
 	}
+	putTheCommandInBufferIfCan();
 	return promise;
 }
 Promise<void> *ATConnection::setValue(const char *variable, const char *value) noexcept
@@ -168,38 +154,15 @@ Promise<void> *ATConnection::setValue(const char *variable, const char *value) n
 	memcpy(pVar, variable, variableLength + 1);
 	memcpy(pVal, value, valueLength + 1);
 	commandQueue.push(CommandQueueItem{CommandQueueItem::Type::SET, {.set = {.variable = pVar, .value = pVal}}, promise});
+	putTheCommandInBufferIfCan();
 	return promise;
-}
-
-void ATConnection::communicate() noexcept
-{
-	State state;
-	do
-	{
-		state = this->state;
-		switch (this->state)
-		{
-		case State::WRITING:
-			this->write();
-			break;
-		case State::READING_NOTIFICATION:
-		case State::READING_RESPONSE:
-			this->read();
-			break;
-		}
-	} while (state != this->state);
 }
 
 void ATConnection::write() noexcept
 {
-	assert(state == State::WRITING);
-	if (!stream->availableForWrite())
-	{
-		return;
-	}
 	auto length = buffer.length();
-	assert(length);
 	size_t written = stream->write(buffer.c_str(), length);
+	Serial.printf("AT > %s\n", buffer.substring(0, written).c_str());
 	if (written == length)
 	{
 		buffer.clear();
@@ -212,70 +175,51 @@ void ATConnection::write() noexcept
 }
 void ATConnection::read() noexcept
 {
-	assert(state == State::READING_NOTIFICATION || state == State::READING_RESPONSE);
-	auto available = stream->available();
-	while (available > 0)
+	char buf[255];
+	uint8_t countRead = stream->read((uint8_t *)buf, sizeof(buf));
+	if (!countRead)
 	{
-		char buf[256];
-		buf[255] = 0;
-		available = stream->readBytes(buf, sizeof(buf) - 1);
-		uint8_t begin = 0;
-		while (isspace(buf[begin]))
-		{
-			begin++;
-		}
-		available -= begin;
-		if (!available)
-		{
-			continue;
-		}
-		buffer.concat(buf + begin, available);
-		available = stream->available();
+		return;
 	}
-	if (buffer.length()) {
-		while ((state == State::READING_NOTIFICATION || state == State::READING_RESPONSE) && buffer.length() && parse())
+	if (!buffer.concat(buf, countRead)) {
+		buffer.clear();
+		return;
+	}
+	if (!memchr(buf, '\n', countRead))
+	{
+		return;
+	}
+	bool parseSuccess;
+	do {
+		parseSuccess = parse();
+		if (!parseSuccess)
 		{
-			if (state == State::READING_RESPONSE) {
-				state = State::READING_NOTIFICATION;
-			}
+			return;
+		}
+		if (state == State::READING_RESPONSE)
+		{
+			state = State::READING_NOTIFICATION;
+
 			if (!commandQueue.empty())
 			{
 				commandQueue.pop();
 			}
 		}
-	}
-	else if (state == State::READING_NOTIFICATION  && !commandQueue.empty())
+	} while ((state == State::READING_NOTIFICATION || state == State::READING_RESPONSE) && buffer.length());
+	if (state == State::READING_NOTIFICATION && parseSuccess && !commandQueue.empty())
 	{
+		// If parseSuccess is true && state is READING_NOTIFICATION then buffer is definitely is empty
+		putTheCommandInBuffer();
 		state = State::WRITING;
-		putTheCommandInBuffer(&commandQueue.front());
 	}
 }
-
-bool ATConnection::parse()
-{
-	assert(state == State::READING_NOTIFICATION || state == State::READING_RESPONSE);
-	assert(!buffer.isEmpty());
-	if (state == State::READING_RESPONSE) {
-		return parseResponse();
-	}
-	auto pos = buffer.indexOf('\n');
-	if (pos < 0)
-	{
-		return false;
-	}
-	ATNotificationEvent event(buffer.substring(0, pos - 1));
-	this->emit(&event);
-	buffer.remove(0, pos + 1);
-	return true;
-}
-
 bool ATConnection::parseResponse() noexcept
 {
 	assert(state == State::READING_RESPONSE);
 	assert(!commandQueue.empty());
 
 	auto item = commandQueue.front();
-	auto pos = buffer.indexOf(F("OK\r\n"));
+	int pos = buffer.indexOf("OK\r\n");
 	if (pos != -1)
 	{
 		if (item.promise)
@@ -285,7 +229,14 @@ bool ATConnection::parseResponse() noexcept
 			case CommandQueueItem::Type::GET:
 			case CommandQueueItem::Type::TEST:
 			case CommandQueueItem::Type::EXECUTE:
-				((Promise<String> *)item.promise)->resolve(buffer.substring(0, pos));
+				{
+					const char *cStr = buffer.c_str();
+					uint8_t offsetStart = 0;
+					uint8_t offsetEnd = 0;
+					for (; offsetStart < pos && isspace(cStr[offsetStart]); offsetStart++);
+					for (; offsetEnd < pos - offsetStart && isspace(cStr[pos - offsetEnd - 1]); offsetEnd++);
+					((Promise<String> *)item.promise)->resolve(buffer.substring(offsetStart, pos - offsetEnd));
+				}
 				break;
 			case CommandQueueItem::Type::SET:
 				((Promise<void> *)item.promise)->resolve();
@@ -295,7 +246,7 @@ bool ATConnection::parseResponse() noexcept
 		buffer.remove(0, pos + 4);
 		return true;
 	}
-	pos = buffer.indexOf(F("ERROR\r\n"));
+	pos = buffer.indexOf("ERROR\r\n");
 	if (pos != -1)
 	{
 		if (item.promise)
@@ -315,7 +266,7 @@ bool ATConnection::parseResponse() noexcept
 		buffer.remove(0, pos + 7);
 		return true;
 	}
-	pos = buffer.indexOf(F(">"));
+	pos = buffer.indexOf('>');
 	if (pos != -1)
 	{
 		assert(item.type == CommandQueueItem::Type::EXECUTE);
@@ -325,4 +276,17 @@ bool ATConnection::parseResponse() noexcept
 		state = State::WRITING;
 	}
 	return false;
+}
+
+bool ATConnection::parseNotification() noexcept
+{
+	auto pos = buffer.indexOf('\n');
+	if (pos < 0)
+	{
+		return false;
+	}
+	ATNotificationEvent event(buffer.substring(0, pos - 1));
+	this->emit(&event);
+	buffer.remove(0, pos + 1);
+	return true;
 }
