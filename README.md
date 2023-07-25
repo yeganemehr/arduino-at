@@ -53,24 +53,24 @@ There is a `void Promise<T>::freeOnFinish()` method can certainly help you with 
 
 ## Methods & Helpers
 
-**ATConnection::ATConnection(Stream *stream)**:  
+**ATConnection::ATConnection(Stream \*stream)**:  
 The connection constructor needs a stream, It's usully is a Software or Hardware serial but technically it even can be a TCP stream!
 
-**Promise\<void\> *ATConnection::setValue(char *variable, char *value)**:  
-It's basically an alias for `ATConnection::execute("AT+${variable}=${value}")`.
+**Promise\<void\> \*ATConnection::setValue(char \*variable, char \*value, uint8_t timeuot = 2)**:  
+It's basically an alias for `ATConnection::execute("AT+${variable}=${value}", timeuot)`.
 
-**Promise\<String\> *ATConnection::getValue(char *variable)**:  
-It's basically an alias for `ATConnection::execute("AT+${variable}?")`.
+**Promise\<String\> \*ATConnection::getValue(char \*variable, uint8_t timeuot = 2)**:  
+It's basically an alias for `ATConnection::execute("AT+${variable}?", timeuot)`.
 
-**Promise\<String\> *ATConnection::test(char *variable)**:  
-It's basically an alias for `ATConnection::execute("AT+${variable}=?")`.
+**Promise\<String\> \*ATConnection::test(char \*variable, uint8_t timeuot = 2)**:  
+It's basically an alias for `ATConnection::execute("AT+${variable}=?", timeuot)`.
 
-**Promise\<String\> *ATConnection::execute(char *command)**:  
+**Promise\<String\> \*ATConnection::execute(char \*command, uint8_t timeuot = 2)**:  
 Sends `command` to the modem and waits for it's response.  
 If the response ends with "OK<CRLF>" promise will resolve with any data after sending the command and receive the `OK`.  
 If the response ends with "ERROR<CRLF>" promise will reject any data after sending the command and receive the `ERROR`.
 
-**Promise\<String\> *ATConnection::execute(char *command, char *secondPart)**:  
+**Promise\<String\> \*ATConnection::execute(char \*command, char \*secondPart, uint8_t timeuot = 20)**:  
 It's like prevouis form but if there is a need to send second part of payload, it will send it.   
 Executing commands like `AT+CMGS` needs this form.
 
@@ -78,6 +78,13 @@ Executing commands like `AT+CMGS` needs this form.
 Read from / Write to stream.
 You should put it in `loop()` method.
 
+
+# Time Limit
+Every method of this library that run a AT command has a default timeout for that command of 2 seconds.
+
+Except for two-part-execute (command, secondPart, timeuot) method which has a 20 seconds time. This method usually used for sending sms and other time-consuming tasks.
+
+If you want to disable the timeout set it to 0.
 
 # TODO
 * Add listening to NotificationEvent to documention.
