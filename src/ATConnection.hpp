@@ -9,6 +9,7 @@
 #include "events/ATNotificationEvent.hpp"
 #include "exceptions/GeneralATError.hpp"
 #include <Arduino.h>
+#include <ctime>
 
 struct SetCommand
 {
@@ -41,11 +42,11 @@ class ATConnection : public EventEmitter
 {
 public:
 	ATConnection(Stream *stream);
-	Promise<void> *setValue(const char *variable, const char *value) noexcept;
-	Promise<String> *getValue(const char *variable) noexcept;
-	Promise<String> *test(const char *variable) noexcept;
-	Promise<String> *execute(const char *command) noexcept;
-	Promise<String> *execute(const char *command, const char *secondPart) noexcept;
+	Promise<void> *setValue(const char *variable, const char *value, uint8_t timeuot = 2) noexcept;
+	Promise<String> *getValue(const char *variable, uint8_t timeuot = 2) noexcept;
+	Promise<String> *test(const char *variable, uint8_t timeuot = 2) noexcept;
+	Promise<String> *execute(const char *command, uint8_t timeuot = 2) noexcept;
+	Promise<String> *execute(const char *command, const char *secondPart, uint8_t timeuot = 20) noexcept;
 	inline void communicate() noexcept {
 		State state;
 		do
@@ -62,7 +63,7 @@ public:
 				break;
 			}
 #ifdef ESP8266
-			optimistic_yield(1000);
+			yield();
 #endif
 		} while (state != this->state);
 	}
@@ -70,6 +71,8 @@ public:
 private:
 	Stream *stream;
 	String buffer;
+	std::time_t sentCommandAt = 0;
+	
 	enum State : uint8_t
 	{
 		WRITING,
@@ -86,6 +89,7 @@ private:
 			TEST,
 			EXECUTE,
 		} type;
+		uint8_t timeout;
 		ATCommand command;
 		void *promise;
 	};
@@ -122,7 +126,9 @@ private:
 		state = State::WRITING;
 	}
 	inline void putTheCommandInBuffer() {
-		putTheCommandInBuffer(&commandQueue.front());
+		CommandQueueItem &item = commandQueue.front();
+		putTheCommandInBuffer(&item);
+		sentCommandAt = item.timeout ? std::time(nullptr) : 0;
 	}
 	inline void putTheCommandInBuffer(CommandQueueItem *item) {
 		switch (item->type)
@@ -141,7 +147,34 @@ private:
 			break;
 		}
 	}
-	
+	inline void checkForCommandTimeout() {
+		if (!sentCommandAt)
+		{
+			return;
+		}
+		std::time_t now = std::time(nullptr);
+		CommandQueueItem &item = commandQueue.front();
+		if (now - sentCommandAt < item.timeout)
+		{
+			return;
+		}
+		switch (item.type)
+		{
+		case CommandQueueItem::Type::GET:
+		case CommandQueueItem::Type::TEST:
+		case CommandQueueItem::Type::EXECUTE:
+		{
+			((Promise<String> *)item.promise)->reject(std::exception());
+		}
+		break;
+		case CommandQueueItem::Type::SET:
+			((Promise<void> *)item.promise)->reject(std::exception());
+			break;
+		}
+		state = State::READING_NOTIFICATION;
+		sentCommandAt = 0;
+		commandQueue.pop();
+	}
 };
 
 #endif

@@ -9,10 +9,10 @@ void ATConnection::putTheCommandInBuffer(GetCommand *command)
 	assert(!buffer.length());
 	assert(command->variable);
 	auto len = strlen(command->variable);
-	buffer.reserve(3 + len + 1 + 1);
+	buffer.reserve(3 + len + 1 + 2);
 	buffer.concat("AT+");
 	buffer.concat(command->variable, len);
-	buffer.concat("?\r");
+	buffer.concat("?\r\n");
 	delete[] command->variable;
 	command->variable = nullptr;
 }
@@ -23,12 +23,13 @@ void ATConnection::putTheCommandInBuffer(SetCommand *command)
 	assert(command->value);
 	auto lenVar = strlen(command->variable);
 	auto lenVal = strlen(command->value);
-	buffer.reserve(3 + lenVar + 1 + lenVal + 1);
+	buffer.reserve(3 + lenVar + 1 + lenVal + 2);
 	buffer.concat("AT+");
 	buffer.concat(command->variable, lenVar);
 	buffer.concat('=');
 	buffer.concat(command->value, lenVal);
 	buffer.concat('\r');
+	buffer.concat('\n');
 	delete[] command->variable;
 	command->variable = nullptr;
 	delete[] command->value;
@@ -39,10 +40,10 @@ void ATConnection::putTheCommandInBuffer(TestCommand *command)
 	assert(!buffer.length());
 	assert(command->variable);
 	auto len = strlen(command->variable);
-	buffer.reserve(3 + len + 2 + 1);
+	buffer.reserve(3 + len + 2 + 2);
 	buffer.concat("AT+");
 	buffer.concat(command->variable, len);
-	buffer.concat("=?\r");
+	buffer.concat("=?\r\n");
 	delete[] command->variable;
 	command->variable = nullptr;
 }
@@ -54,9 +55,10 @@ void ATConnection::putTheCommandInBuffer(ExecuteCommand *command)
 	if (command->command) {
 		assert(command->command);
 		len = strlen(command->command);
-		buffer.reserve(len + 1);
+		buffer.reserve(len + 2);
 		buffer.concat(command->command, len);
 		buffer.concat('\r');
+		buffer.concat('\n');
 		delete[] command->command;
 		command->command = nullptr;
 		return;
@@ -77,17 +79,22 @@ void ATConnection::putTheCommandInBuffer(ExecuteCommand *command)
 
 	panic();
 }
-Promise<String> *ATConnection::getValue(const char *variable) noexcept
+Promise<String> *ATConnection::getValue(const char *variable, uint8_t timeout) noexcept
 {
 	Promise<String> *promise = new Promise<String>();
 	auto variableLength = strlen(variable);
 	auto ptr = new char[variableLength + 1];
 	memcpy(ptr, variable, variableLength + 1);
-	commandQueue.push(CommandQueueItem{CommandQueueItem::Type::GET, {.get = {.variable = ptr}}, promise});
+	commandQueue.push(CommandQueueItem{
+		.type = CommandQueueItem::Type::GET,
+		.timeout = timeout,
+		.command = {.get = {.variable = ptr}},
+		.promise = promise
+	});
 	putTheCommandInBufferIfCan();
 	return promise;
 }
-Promise<String> *ATConnection::execute(const char *command) noexcept
+Promise<String> *ATConnection::execute(const char *command, uint8_t timeout) noexcept
 {
 	Promise<String> *promise = new Promise<String>();
 	auto commandLength = strlen(command);
@@ -95,6 +102,7 @@ Promise<String> *ATConnection::execute(const char *command) noexcept
 	memcpy(ptr, command, commandLength + 1);
 	commandQueue.push(CommandQueueItem{
 		.type = CommandQueueItem::Type::EXECUTE,
+		.timeout = timeout,
 		.command = {
 			.execute = {
 				.command = ptr,
@@ -106,7 +114,8 @@ Promise<String> *ATConnection::execute(const char *command) noexcept
 	putTheCommandInBufferIfCan();
 	return promise;
 }
-Promise<String> *ATConnection::execute(const char *command, const char *secondPart) noexcept {
+Promise<String> *ATConnection::execute(const char *command, const char *secondPart, uint8_t timeout) noexcept
+{
 	Promise<String> *promise = new Promise<String>();
 	auto commandLength = strlen(command);
 	auto secondPartLength = strlen(secondPart);
@@ -116,6 +125,7 @@ Promise<String> *ATConnection::execute(const char *command, const char *secondPa
 	memcpy(sPtr, secondPart, secondPartLength + 1);
 	commandQueue.push(CommandQueueItem{
 		.type = CommandQueueItem::Type::EXECUTE,
+		.timeout = timeout,
 		.command = {
 			.execute = {
 				.command = cPtr,
@@ -127,7 +137,7 @@ Promise<String> *ATConnection::execute(const char *command, const char *secondPa
 	putTheCommandInBufferIfCan();
 	return promise;
 }
-Promise<String> *ATConnection::test(const char *variable) noexcept
+Promise<String> *ATConnection::test(const char *variable, uint8_t timeout) noexcept
 {
 	Promise<String> *promise = new Promise<String>();
 	auto variableLength = strlen(variable);
@@ -135,16 +145,14 @@ Promise<String> *ATConnection::test(const char *variable) noexcept
 	memcpy(ptr, variable, variableLength + 1);
 	commandQueue.push(CommandQueueItem{
 		.type = CommandQueueItem::Type::TEST,
+		.timeout = timeout,
 		.command = {.test = {.variable = ptr}},
 		.promise = promise
 	});
-	if (commandQueue.size() == 1) {
-		this->state = State::WRITING;
-	}
 	putTheCommandInBufferIfCan();
 	return promise;
 }
-Promise<void> *ATConnection::setValue(const char *variable, const char *value) noexcept
+Promise<void> *ATConnection::setValue(const char *variable, const char *value, uint8_t timeout) noexcept
 {
 	Promise<void> *promise = new Promise<void>();
 	auto variableLength = strlen(variable);
@@ -153,7 +161,12 @@ Promise<void> *ATConnection::setValue(const char *variable, const char *value) n
 	auto pVal = new char[valueLength + 1];
 	memcpy(pVar, variable, variableLength + 1);
 	memcpy(pVal, value, valueLength + 1);
-	commandQueue.push(CommandQueueItem{CommandQueueItem::Type::SET, {.set = {.variable = pVar, .value = pVal}}, promise});
+	commandQueue.push(CommandQueueItem{
+		.type = CommandQueueItem::Type::SET,
+		.timeout = timeout,
+		.command = {.set = {.variable = pVar, .value = pVal}},
+		.promise = promise
+	});
 	putTheCommandInBufferIfCan();
 	return promise;
 }
@@ -162,7 +175,6 @@ void ATConnection::write() noexcept
 {
 	auto length = buffer.length();
 	size_t written = stream->write(buffer.c_str(), length);
-	Serial.printf("AT > %s\n", buffer.substring(0, written).c_str());
 	if (written == length)
 	{
 		buffer.clear();
@@ -175,22 +187,30 @@ void ATConnection::write() noexcept
 }
 void ATConnection::read() noexcept
 {
-	char buf[255];
-	uint8_t countRead = stream->read((uint8_t *)buf, sizeof(buf));
+	char buf[256];
+	uint8_t countRead = stream->read((uint8_t *)buf, sizeof(buf) - 1);
 	if (!countRead)
 	{
+		checkForCommandTimeout();
 		return;
 	}
+	buf[countRead] = 0;
 	if (!buffer.concat(buf, countRead)) {
 		buffer.clear();
 		return;
 	}
-	if (!memchr(buf, '\n', countRead))
-	{
+	if (
+		!memchr(buf, '\n', countRead) &&
+		(
+			state == State::READING_NOTIFICATION ||
+			!memchr(buf, '>', countRead)
+		)
+	) {
 		return;
 	}
 	bool parseSuccess;
-	do {
+	do
+	{
 		parseSuccess = parse();
 		if (!parseSuccess)
 		{
@@ -199,7 +219,7 @@ void ATConnection::read() noexcept
 		if (state == State::READING_RESPONSE)
 		{
 			state = State::READING_NOTIFICATION;
-
+			sentCommandAt = 0;
 			if (!commandQueue.empty())
 			{
 				commandQueue.pop();
@@ -217,7 +237,6 @@ bool ATConnection::parseResponse() noexcept
 {
 	assert(state == State::READING_RESPONSE);
 	assert(!commandQueue.empty());
-
 	auto item = commandQueue.front();
 	int pos = buffer.indexOf("OK\r\n");
 	if (pos != -1)
@@ -273,6 +292,7 @@ bool ATConnection::parseResponse() noexcept
 		assert(item.command.execute.secondPart);
 		buffer.clear();
 		putTheCommandInBuffer(&item.command.execute);
+		sentCommandAt = std::time(nullptr);
 		state = State::WRITING;
 	}
 	return false;
