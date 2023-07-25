@@ -1,7 +1,7 @@
 {
 	"$schema": "https://raw.githubusercontent.com/platformio/platformio-core/develop/platformio/assets/schema/library.json",
 	"name": "arduino-at",
-	"version": "0.1.1",
+	"version": "0.2.0",
 	"description": "It's a fully async library for communicate with AT modems.",
 	"keywords":["async", "at", "at command", "gsm"],
 	"license": "MIT",
