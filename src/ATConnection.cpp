@@ -50,10 +50,10 @@ void ATConnection::putTheCommandInBuffer(TestCommand *command)
 void ATConnection::putTheCommandInBuffer(ExecuteCommand *command)
 {
 	assert(!buffer.length());
+	assert(command->command || command->secondPart);
 	size_t len;
 
 	if (command->command) {
-		assert(command->command);
 		len = strlen(command->command);
 		buffer.reserve(len + 2);
 		buffer.concat(command->command, len);
@@ -64,20 +64,13 @@ void ATConnection::putTheCommandInBuffer(ExecuteCommand *command)
 		return;
 	}
 
-	if (command->secondPart)
-	{
-		assert(command->secondPart);
-		len = strlen(command->secondPart);
-		buffer.reserve(len + 1);
-		buffer.concat(command->secondPart, len);
-		buffer.concat('\x1A');
+	len = strlen(command->secondPart);
+	buffer.reserve(len + 1);
+	buffer.concat(command->secondPart, len);
+	buffer.concat('\x1A');
 
-		delete[] command->secondPart;
-		command->secondPart = nullptr;
-		return;
-	}
-
-	panic();
+	delete[] command->secondPart;
+	command->secondPart = nullptr;
 }
 Promise<String> *ATConnection::getValue(const char *variable, uint8_t timeout) noexcept
 {
@@ -188,7 +181,11 @@ void ATConnection::write() noexcept
 void ATConnection::read() noexcept
 {
 	char buf[256];
-	uint8_t countRead = stream->read((uint8_t *)buf, sizeof(buf) - 1);
+	uint8_t countRead = 0;
+	for (; countRead < sizeof(buf) - 1 && stream->available() > 0; countRead++)
+	{
+		buf[countRead] = stream->read();
+	}
 	if (!countRead)
 	{
 		checkForCommandTimeout();

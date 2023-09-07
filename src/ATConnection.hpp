@@ -27,7 +27,7 @@ struct TestCommand
 struct ExecuteCommand
 {
 	char *command;
-	char *secondPart = nullptr;
+	char *secondPart;
 };
 
 union ATCommand
@@ -108,7 +108,7 @@ private:
 		case State::READING_NOTIFICATION:
 			return parseNotification();
 		default:
-			panic();
+			assert(false);
 		}
 	}
 

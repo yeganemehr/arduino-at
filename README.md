@@ -3,13 +3,13 @@
 
 # General Information
 I tried to build a fluent API for communication with GSM modems in a generic and efficient way.  
-There are plenty of GSM modem clients out there but very few of them are truthly asynchronous and others just using `delay()` in their code which can problems in other parts of process.
+There are plenty of GSM modem clients out there but very few of them are truthly asynchronous and others just using `delay()` in their code which can cause problems in other parts of process.
 
-Anyway technically this code run on any boards which can run Ardunio framework but I did tested it only on esp8266.
+Anyway technically this code run on any boards which can run Arduino framework but I did tested it only on esp8266.
 
 # Quickstart
 
-Let's say we want to test if our modem is up and running and if AT Echo was enabled, we'll turn it off.   
+Let's say we want to test if our modem is up and running and if AT Echo is enabled, We turn it off.   
 In this example I used SoftwareSerial on D3 & D4 pins but you are free to use HardwareSerial or even a Tcp stream!
 ```c++
 #include <Arduino.h>
@@ -44,7 +44,7 @@ void loop() {
 }
 
 ```
-You can build and upload this code to your board quickly with [Ready-To-Use Example](examples/esp8266-arduino)
+You can build and upload this code to your board quickly with [Ready-To-Use Example](examples/esp-arduino)
 
 ## Important to Remember
 Currently the library using heap memory to construct promises so you must take care of free the memory of promise.   
