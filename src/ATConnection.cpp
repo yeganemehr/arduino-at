@@ -302,7 +302,8 @@ bool ATConnection::parseNotification() noexcept
 	{
 		return false;
 	}
-	ATNotificationEvent event(buffer.substring(0, pos - 1));
+	String content = buffer.substring(0, pos - 1);
+	ATNotificationEvent event(content);
 	this->emit(&event);
 	buffer.remove(0, pos + 1);
 	return true;
