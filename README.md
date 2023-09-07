@@ -94,7 +94,6 @@ Except for two-part-execute (command, secondPart, timeuot) method which has a 20
 If you want to disable the timeout set it to 0.
 
 # TODO
-* Add listening to NotificationEvent to documention.
 * Unit tests.
 
 # License
