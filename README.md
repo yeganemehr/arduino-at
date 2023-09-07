@@ -23,6 +23,13 @@ void setup() {
 	Serial.begin(9600);
 	swSerial.begin(9600);
 	delay(1000);
+
+	// Setup event listener
+	at.on(ATNotificationEvent::type, [](const Event *env) {
+		auto notification = (const ATNotificationEvent *)env;
+		Serial.printf("AT Notfication: \"%s\"\n", notification->content.c_str());
+	});
+
 	Serial.println("checking the connection:");
 	at.execute("AT")
 		->onSuccess([](const String &result) {
