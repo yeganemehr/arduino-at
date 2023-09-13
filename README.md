@@ -83,7 +83,7 @@ Executing commands like `AT+CMGS` needs this form.
 
 **Promise\<String\> \*ATConnection::execute(char \*command, byte \*secondPart, size_t length, uint8_t timeuot = 20)**:  
 It's like previous form but allows binary mode when sending data.
-Executing commands like AT+CIPSEND=length needs this form.
+Executing commands like `AT+CIPSEND=length` needs this form.
 
 **void ATConnection::communicate()**:  
 Read from / Write to stream.
