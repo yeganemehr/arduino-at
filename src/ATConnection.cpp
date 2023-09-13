@@ -64,10 +64,18 @@ void ATConnection::putTheCommandInBuffer(ExecuteCommand *command)
 		return;
 	}
 
-	len = strlen(command->secondPart);
-	buffer.reserve(len + 1);
-	buffer.concat(command->secondPart, len);
-	buffer.concat('\x1A');
+	if (command->length == 0) {
+		// Ascii  mode
+		len = strlen(command->secondPart);
+		buffer.reserve(len + 1);
+		buffer.concat(command->secondPart, len);
+		buffer.concat('\x1A');
+	}
+	else {
+		// Binary mode
+		buffer.reserve(command->length);
+		buffer.concat(command->secondPart, command->length);
+	}
 
 	delete[] command->secondPart;
 	command->secondPart = nullptr;
@@ -99,7 +107,8 @@ Promise<String> *ATConnection::execute(const char *command, uint8_t timeout) noe
 		.command = {
 			.execute = {
 				.command = ptr,
-				.secondPart = nullptr
+				.secondPart = nullptr,
+				.length = 0
 			}
 		},
 		.promise = promise
@@ -122,7 +131,32 @@ Promise<String> *ATConnection::execute(const char *command, const char *secondPa
 		.command = {
 			.execute = {
 				.command = cPtr,
-				.secondPart = sPtr
+				.secondPart = sPtr,
+				.length = 0
+			}
+		},
+		.promise = promise
+	});
+	putTheCommandInBufferIfCan();
+	return promise;
+}
+Promise<String> *ATConnection::execute(const char *command, const byte *secondPart, size_t length, uint8_t timeout) noexcept
+{
+	Promise<String> *promise = new Promise<String>();
+	auto commandLength = strlen(command);
+	auto secondPartLength = length;
+	char *cPtr = new char[commandLength + 1];
+	char *sPtr = new char[secondPartLength + 1];
+	memcpy(cPtr, command, commandLength + 1);
+	memcpy(sPtr, secondPart, length);
+	commandQueue.push(CommandQueueItem{
+		.type = CommandQueueItem::Type::EXECUTE,
+		.timeout = timeout,
+		.command = {
+			.execute = {
+				.command = cPtr,
+				.secondPart = sPtr,
+				.length = length
 			}
 		},
 		.promise = promise
