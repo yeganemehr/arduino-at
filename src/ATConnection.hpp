@@ -28,6 +28,7 @@ struct ExecuteCommand
 {
 	char *command;
 	char *secondPart;
+	size_t length;
 };
 
 union ATCommand
@@ -47,6 +48,7 @@ public:
 	Promise<String> *test(const char *variable, uint8_t timeuot = 2) noexcept;
 	Promise<String> *execute(const char *command, uint8_t timeuot = 2) noexcept;
 	Promise<String> *execute(const char *command, const char *secondPart, uint8_t timeuot = 20) noexcept;
+	Promise<String> *execute(const char *command, const byte *secondPart, size_t length, uint8_t timeuot = 20) noexcept;
 	inline void communicate() noexcept {
 		State state;
 		do

@@ -78,8 +78,12 @@ If the response ends with "OK<CRLF>" promise will resolve with any data after se
 If the response ends with "ERROR<CRLF>" promise will reject any data after sending the command and receive the `ERROR`.
 
 **Promise\<String\> \*ATConnection::execute(char \*command, char \*secondPart, uint8_t timeuot = 20)**:  
-It's like prevouis form but if there is a need to send second part of payload, it will send it.   
+It's like previous form but if there is a need to send second part of payload, it will send it.   
 Executing commands like `AT+CMGS` needs this form.
+
+**Promise\<String\> \*ATConnection::execute(char \*command, byte \*secondPart, size_t length, uint8_t timeuot = 20)**:  
+It's like previous form but allows binary mode when sending data.
+Executing commands like `AT+CIPSEND=length` needs this form.
 
 **void ATConnection::communicate()**:  
 Read from / Write to stream.
